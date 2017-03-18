@@ -1,0 +1,120 @@
+---
+title: "Prediction Assignment - Analysis on personal activity data"
+author: "Shyam Chander"
+date: "March 14, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Synopsis
+
+The objective of this analytical and predictive excercise is to apply machine learning algorithms to data collected from devices such as Jawbone Up, Fitbit and Nike Fuel Band and to find patterns of behavior that determine how well the people that the data is collected from do these personal activities. This data is from accelerometers on the belt, forearm, and dumbell of 6 participantsw who were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The data for this project is from the source: http://groupware.les.inf.puc-rio.br/har (Weight Lifting Exercise Dataset).
+
+The analysis in the document will use a prediction model to determine predict 20 different test cases and apply machine learning algorthims to 20 test cases and submit predictions.
+
+This project is hosted on github at: https://github.com/shyamchander/pmi-week4-assignment
+
+## Data Processing
+
+### Prerequesite libraries for analysis
+```{r libraries, echo=TRUE, message=FALSE}
+library(caret)
+library(randomForest)
+library(knitr)
+```
+
+### R code for downloading and loading data in R
+```{r loaddata, echo=TRUE, cache=TRUE}
+# Create if "data" folder does not exist to download the data
+if(!file.exists("data")){
+   dir.create("data",recursive = TRUE)    
+}
+
+#Downloading the data files
+#Downloading training data file
+if(!file.exists(file.path("data","pml-training.csv"))){
+download.file(
+              "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv",
+              destfile = file.path("data","pml-training.csv"))
+}
+
+#Downloading testdata file
+if(!file.exists(file.path("data","pml-testing.csv"))){
+download.file(
+              "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv",
+              destfile = file.path("data","pml-testing.csv"))
+}
+
+
+#Loading data from training and test data set file
+trainingData<-read.csv(file = file.path("data","pml-training.csv"), header=T,na.strings=c("NA","#DIV/0!",""))
+validationData<-read.csv(file = file.path("data","pml-testing.csv"), header=T,na.strings=c("NA","#DIV/0!",""))
+```
+
+### Data Cleaning
+Removing:
+*Columns 1:7 which are not relevant for the analysis
+*Those columns which have almost all NAs based on the Validation data set
+
+```{r cleaning, echo=TRUE}
+trainingData<-trainingData[-(1:7)]
+validationData<-validationData[-(1:7)]
+
+hasData  <- apply(!is.na(validationData), 2, sum) > (nrow(validationData)-1)
+
+trainingData<-trainingData[,hasData]
+validationData<-validationData[,hasData]
+```
+
+
+### Data Partitioning
+We'll need to split the training data into seperate training and testing partitions and cross validate in the training partition for modeling fit.
+```{r partition, echo=TRUE}
+#Setting the seed for reproduciblity
+set.seed(67512)
+
+#Partitioning
+trainingPartition <- createDataPartition(y=trainingData$classe, p=0.7, list=FALSE)
+trainingSubset <- trainingData[trainingPartition,]
+testingSubset <- trainingData[-trainingPartition,]
+dim(trainingPartition)
+dim(trainingSubset)
+dim(testingSubset)
+```
+
+## Modeling the data
+
+### Cross Validation
+```{r cv, echo=TRUE}
+trainingControl <- trainControl(method='cv', number = 3)
+```
+
+### Random Forest Algorithm
+We will be using the "Random Forest decision trees" model algorithm.
+```{r modeling, echo=TRUE}
+randomForest <- train( classe ~ ., data=trainingSubset,
+  trControl=trainingControl, method='rf',  ntree=100)
+```
+
+### Applying to the testing subset
+
+We'll calculate the confusion matrix for the Random Forest prediction against the Testing Subset
+```{r testing, echo=TRUE}
+prediction <- predict(randomForest, newdata=testingSubset)
+
+confusionMatrix(prediction, testingSubset$classe)
+```
+All the metrics show that the out of sample error rate for the predictor is low.
+
+## Predicting for the 20 test cases in the validation data set
+
+Now applying the prediction algorithm to the validation data set and printing out the predictions.
+```{r prediction, echo=TRUE}
+prediction <- predict(randomForest, newdata=validationData)
+results <- data.frame(problem_id=validationData$problem_id,machine_learning_prediction=prediction)
+
+kable(results,align='l')
+```
